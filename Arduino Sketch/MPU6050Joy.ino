@@ -9,7 +9,7 @@
 //     2014-03-22 HD version. Axis range now -32767 to 32767
 //     2014-03-25 Clip axis values on limits
 //     2014-03-26 Button press during 1st 10 seconds will initiate full calibrate
-//     2014-03-27 Read/Write Calibrated values to EEPROM. 
+//     2014-03-27 Read/Write Calibrated values to EEPROM
 //
 
 /* ============================================
@@ -181,8 +181,8 @@ void readOffsets()
 // Minimal Seup.
 void setup()
 {
-  //delay(5000);
 #ifdef DEBUGOUTPUT
+  delay(5000);
   Serial.begin(115200);
   Serial.println("Hello world");
 #endif
@@ -446,9 +446,9 @@ void loop() {
     float ySensitivity = 4.0;
     float zSensitivity = 6.0;
 
-    float xFudge       = -15.0 * 256.;
-    float yFudge       = -15.0 * 256.0; //-25.0 *256.0;
-    float zFudge       =  50.0;
+    float xFudge       = 0.0;//-15.0 * 256.;
+    float yFudge       = 0.0;//-15.0 * 256.0; //-25.0 *256.0;
+    float zFudge       = 0.0;// 50.0;
 
     // and scale to out target range plus a 'sensitivity' factor;
     int   iX = (int)(newX * 32767.0 * xSensitivity + xFudge );//side mount = yaw  *255

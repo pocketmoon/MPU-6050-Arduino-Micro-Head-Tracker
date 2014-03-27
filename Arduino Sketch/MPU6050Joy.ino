@@ -181,7 +181,7 @@ void readOffsets()
 // Minimal Seup.
 void setup()
 {
-  delay(5000);
+  //delay(5000);
 #ifdef DEBUGOUTPUT
   Serial.begin(115200);
   Serial.println("Hello world");

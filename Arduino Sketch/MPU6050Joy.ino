@@ -9,6 +9,8 @@
 //     2014-03-22 HD version. Axis range now -32767 to 32767
 //     2014-03-25 Clip axis values on limits
 //     2014-03-26 Button press during 1st 10 seconds will initiate full calibrate
+//     2014-03-27 Read/Write Calibrated values to EEPROM. 
+//
 
 /* ============================================
 I2Cdev device library code is placed under the MIT license
@@ -39,6 +41,7 @@ THE SOFTWARE.
 
 #include "I2Cdev.h"
 #include "MPU6050_6Axis_MotionApps20.h"
+#include <EEPROM.h>
 
 #if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
 #include "Wire.h"
@@ -119,14 +122,74 @@ ISR(INT6_vect) {
   dmpDataReady();
 }
 
+//Need some helper funct to read/write integers
+void writeIntEE(int value, int address)
+{
+  EEPROM.write(address, value & 0xff); // write lower byte
+  EEPROM.write(address + 1, value >> 8); //upper byte
+}
+
+int readIntEE(int address)
+{
+  int val;
+  val = EEPROM.read(address);
+  val |= EEPROM.read(address + 1) << 8;
+  return val;
+}
+
+void saveOffsets()
+{
+#ifdef DEBUGOUTPUT
+  Serial.println(F("Save Stored offsets"));
+#endif
+  EEPROM.write(0, 99);
+  writeIntEE (xGyroOffset, 1);
+  writeIntEE (yGyroOffset, 3);
+  writeIntEE (zGyroOffset, 5);
+  writeIntEE (xAccelOffset, 7);
+  writeIntEE (yAccelOffset, 9);
+  writeIntEE (zAccelOffset, 11);
+}
+
+void readOffsets()
+{
+  byte valid = EEPROM.read(0) ;
+  if (valid == 99) // We have some stored offsets
+  {
+#ifdef DEBUGOUTPUT
+    Serial.print(F("Read Stored offsets :"));
+#endif
+    xGyroOffset = readIntEE(1);
+    yGyroOffset = readIntEE(3);
+    zGyroOffset = readIntEE(5);
+    xAccelOffset = readIntEE(7);
+    yAccelOffset = readIntEE(9);
+    zAccelOffset = readIntEE(11);
+
+#ifdef DEBUGOUTPUT
+    Serial.println(xAccelOffset);
+#endif
+  }
+  else
+  {
+    saveOffsets();
+  }
+}
+
+
 
 // Minimal Seup.
 void setup()
 {
+  delay(5000);
 #ifdef DEBUGOUTPUT
   Serial.begin(115200);
   Serial.println("Hello world");
 #endif
+
+  // On first run will write the initial offsets to EEPROM
+  // on subsequent runs will use offsets in EEPROM
+  readOffsets();
 
   pinMode(BUTTON_PIN, INPUT_PULLUP);
   pinMode(LED_PIN, OUTPUT);
@@ -235,7 +298,7 @@ boolean full_calib = false;
 
 // Main Loop
 void loop() {
-  
+
 
   nowMillis = millis();
 
@@ -300,58 +363,58 @@ void loop() {
     // if we're still in the initial 'settling' period do nothing ...
     if (nowMillis < calibrateTime)
     {
-      #ifdef DEBUGOUTPUT
-    Serial.println(F("Settle"));
+#ifdef DEBUGOUTPUT
+      Serial.println(F("Settle"));
 #endif
       // unless we have been asked for a full blow auto calibrate!
       if (digitalRead(BUTTON_PIN) == LOW)
       {
-              #ifdef DEBUGOUTPUT
-    Serial.println(F("Full Calibration Requested."));
+#ifdef DEBUGOUTPUT
+        Serial.println(F("Full Calibration Requested."));
 #endif
-        full_calib = true;       
+        full_calib = true;
       }
       return;
     }
-    
-    if (full_calib==true)
+
+    if (full_calib == true)
     {
-       //deactivate interupt
-        EIMSK &= ~(1 << INT6); // activates the interrupt. 6 for 6, etc
-        full_calib=false;
+      //deactivate interupt
+      EIMSK &= ~(1 << INT6); // activates the interrupt. 6 for 6, etc
+      full_calib = false;
 #ifdef DEBUGOUTPUT
-        Serial.print("Pre  Gyro XYZ Accel XYZ:");
-        Serial.print(xGyroOffset);
-        Serial.print("\t");
-        Serial.print(yGyroOffset);
-        Serial.print("\t");
-        Serial.print(zGyroOffset);
-        Serial.print("\t");
-        Serial.print(xAccelOffset);
-        Serial.print("\t");
-        Serial.print(yAccelOffset);
-        Serial.print("\t");
-        Serial.println(zAccelOffset);
+      Serial.print("Pre  Gyro XYZ Accel XYZ:");
+      Serial.print(xGyroOffset);
+      Serial.print("\t");
+      Serial.print(yGyroOffset);
+      Serial.print("\t");
+      Serial.print(zGyroOffset);
+      Serial.print("\t");
+      Serial.print(xAccelOffset);
+      Serial.print("\t");
+      Serial.print(yAccelOffset);
+      Serial.print("\t");
+      Serial.println(zAccelOffset);
 #endif
-        full_calibrate();
+      full_calibrate();
 #ifdef DEBUGOUTPUT
-        Serial.print("Post Gyro XYZ Accel XYZ:");
-        Serial.print(xGyroOffset);
-        Serial.print("\t");
-        Serial.print(yGyroOffset);
-        Serial.print("\t");
-        Serial.print(zGyroOffset);
-        Serial.print("\t");
-        Serial.print(xAccelOffset);
-        Serial.print("\t");
-        Serial.print(yAccelOffset);
-        Serial.print("\t");
-        Serial.println(zAccelOffset);
+      Serial.print("Post Gyro XYZ Accel XYZ:");
+      Serial.print(xGyroOffset);
+      Serial.print("\t");
+      Serial.print(yGyroOffset);
+      Serial.print("\t");
+      Serial.print(zGyroOffset);
+      Serial.print("\t");
+      Serial.print(xAccelOffset);
+      Serial.print("\t");
+      Serial.print(yAccelOffset);
+      Serial.print("\t");
+      Serial.println(zAccelOffset);
 #endif
-        EIMSK |= (1 << INT6); // activates the interrupt. 6 for 6,
-        return;
-      }
-    
+      EIMSK |= (1 << INT6); // activates the interrupt. 6 for 6,
+      return;
+    }
+
 
     if (!calibrated)
     {
@@ -382,9 +445,9 @@ void loop() {
     float xSensitivity = 4.0;
     float ySensitivity = 4.0;
     float zSensitivity = 6.0;
-    
-    float xFudge       = -15.0*256.;
-    float yFudge       = -15.0*256.0;   //-25.0 *256.0;
+
+    float xFudge       = -15.0 * 256.;
+    float yFudge       = -15.0 * 256.0; //-25.0 *256.0;
     float zFudge       =  50.0;
 
     // and scale to out target range plus a 'sensitivity' factor;
@@ -549,7 +612,7 @@ void full_calibrate()
   }
 
   if (state == 1) {
-    #ifdef DEBUGOUTPUT
+#ifdef DEBUGOUTPUT
     Serial.println("State 1: Calibrate!");
 #endif
     calibration();
@@ -558,7 +621,7 @@ void full_calibrate()
   }
 
   if (state == 2) {
-        #ifdef DEBUGOUTPUT
+#ifdef DEBUGOUTPUT
     Serial.println("State 2:Calculate means and reset offsets");
 #endif
     meansensors();
@@ -568,6 +631,7 @@ void full_calibrate()
     xAccelOffset = ax_offset;
     yAccelOffset = ay_offset;
     zAccelOffset = az_offset;
+    saveOffsets();
   }
 }
 

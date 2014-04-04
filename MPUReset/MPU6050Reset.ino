@@ -1,16 +1,3 @@
-//
-//  Head Tracker Sketch
-//
-// 22/03/2014 by Rob James  (pocketmoon@gmail.com)
-//
-// Changelog:
-//     2014-03-01 Initial Version
-//     2014-03-21 Ensured License Info included
-//     2014-03-22 HD version. Axis range now -32767 to 32767
-//     2014-03-25 Clip axis values on limits
-//     2014-03-26 Button press during 1st 10 seconds will initiate full calibrate
-//     2014-03-27 Read/Write Calibrated values to EEPROM
-//     2014-04-02 Migrate from I2CMPU6050 libs. Alternative clamping. Anti-drift
 
 #define EMPL_TARGET_ATMEGA328
 

@@ -68,7 +68,7 @@ Quaternion q;           // [w, x, y, z]         quaternion
 //float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll
 
 ////////////////  Plug in your drift compensaion value here:  \\\\\\\\\\\\\\
-float driftComp = -0.70; // more +ve number makes drift more -ve
+float driftComp = 0.00; // more +ve number makes drift more -ve
 
 
 float lastX, lastY, lastZ;

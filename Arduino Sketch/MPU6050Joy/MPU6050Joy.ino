@@ -11,6 +11,8 @@
 //     2014-03-26 Button press during 1st 10 seconds will initiate full calibrate
 //     2014-03-27 Read/Write Calibrated values to EEPROM
 //     2014-04-03 Added Dan's drift compensation. Changed clipping code
+//     2014-04-21 Tidy up - moved main user enterable value to top
+//     2014-04-23 Add Dan's exponential response as a #define
 //
 
 /* ============================================
@@ -38,7 +40,44 @@ THE SOFTWARE.
 */
 
 //comment this in if you want so see output to the serial monitor
-//#define DEBUGOUTPUT 1
+//#define DEBUGOUTPUT 
+
+// uncomment this in to enable exponential scaling of head motion
+// smaller movements near the centre, larger at the edges
+//#define EXPONENTIAL
+
+////////////////  Plug in your drift compensation value here:  \\\\\\\\\\\\\\
+float xDriftComp =0.00; 
+float yDriftComp =0.00; 
+float zDriftComp =0.00; 
+
+// Head movement scaling factors. Will depend on how large your screen is and 
+// how close you sit to it
+
+#ifdef EXPONENTIAL
+float xScale = 8.0;
+float yScale = 8.0;
+float zScale = 8.0;
+#else // standard linear response
+float xScale = 2.5;
+float yScale = 2.5;
+float zScale = 2.5;
+#endif;
+
+// To avoid drift, please enter your own offset values gleaned from 
+// running the master calibration sketch at
+// http://www.i2cdevlib.com/forums/topic/96-arduino-sketch-to-automatically-calculate-mpu6050-offsets/
+//
+int xGyroOffset = 50;
+int yGyroOffset = 20;
+int zGyroOffset = 2;
+int xAccelOffset = -1086;
+int yAccelOffset = -807;
+int zAccelOffset = 1263;
+
+////////////////////////// END OF USER ADJUSTMENTS ////////////////////
+
+
 
 #include "I2Cdev.h"
 #include "MPU6050_6Axis_MotionApps20.h"
@@ -65,25 +104,19 @@ uint8_t fifoBuffer[64]; // FIFO storage buffer
 
 // orientation/motion vars
 Quaternion q;           // [w, x, y, z]         quaternion
-//float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll
-
-////////////////  Plug in your drift compensaion value here:  \\\\\\\\\\\\\\
-float driftComp = 0.00; // more +ve number makes drift more -ve
-
 
 float lastX, lastY, lastZ;
 float dX, dY, dZ;
-float driftSamples = 0.0;
+int driftSamples = 0;
 
 // packet structure for InvenSense teapot demo
 unsigned long lastMillis;
 unsigned long lastUpdate;
-unsigned long lastReport;
 
 float cx , cy, cz = 0.0;
 
 //Running count of samples - used when recalibrating
-float   sampleCount = 0.0;
+int   sampleCount = 0.0;
 boolean calibrated = false;
 
 //Allows the MPU6050 to settle for 10 seconds.
@@ -95,25 +128,13 @@ unsigned int  recalibrateSamples =  500;
 
 // Holds the time since sketch stared
 unsigned long  nowMillis;
-unsigned long frame;
-
-
-// To avoid drift, please enter your OWN gyro offsets.
-// Running the master calibration sketch at
-//http://www.i2cdevlib.com/forums/topic/96-arduino-sketch-to-automatically-calculate-mpu6050-offsets/
-//
-int xGyroOffset = 50;
-int yGyroOffset = 20;
-int zGyroOffset = 2;
-int xAccelOffset = -1086;
-int yAccelOffset = -807;
-int zAccelOffset = 1263;
 
 TrackState_t joySt;
 
 // Interrupt Routine - called when MPU interrupt pin gones high
 // i.e. it has some juicy data for us
 volatile bool mpuInterrupt = false;
+
 void dmpDataReady() {
   mpuInterrupt = true;
 }
@@ -140,7 +161,7 @@ int readIntEE(int address)
 void saveOffsets()
 {
 #ifdef DEBUGOUTPUT
-  Serial.println(F("Save Stored offsets"));
+  Serial.println(F("Save offsets"));
 #endif
   EEPROM.write(0, 97);
   writeIntEE (xGyroOffset, 1);
@@ -157,7 +178,7 @@ void readOffsets()
   if (valid == 97) // We have some stored offsets
   {
 #ifdef DEBUGOUTPUT
-    Serial.print(F("Read Stored offsets :"));
+    Serial.print(F("Read offsets"));
 #endif
     xGyroOffset = readIntEE(1);
     yGyroOffset = readIntEE(3);
@@ -165,10 +186,6 @@ void readOffsets()
     xAccelOffset = readIntEE(7);
     yAccelOffset = readIntEE(9);
     zAccelOffset = readIntEE(11);
-
-#ifdef DEBUGOUTPUT
-    Serial.println(xAccelOffset);
-#endif
   }
   else
   {
@@ -194,7 +211,6 @@ void setup()
   pinMode(LED_PIN, OUTPUT);
 
   lastMillis = millis();
-  lastReport = 0;
 
 #if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
   Wire.begin();
@@ -205,7 +221,7 @@ void setup()
 
   // initialize device
 #ifdef DEBUGOUTPUT
-  Serial.println(F("Initializing MPU6050"));
+  Serial.println(F("Init MPU6050"));
 #endif
 
   mpu.initialize();
@@ -240,9 +256,6 @@ void setup()
     mpu.setDMPEnabled(true);
 
     // enable interrupt detection
-#ifdef DEBUGOUTPUT
-    Serial.println(F("Enabling interrupt"));
-#endif
     //  attachInterrupt(4, dmpDataReady, RISING);
     EICRB |= (1 << ISC60) | (1 << ISC61); // sets the interrupt type for EICRB (INT6)
     EIMSK |= (1 << INT6); // activates the interrupt. 6 for 6, etc
@@ -319,7 +332,7 @@ void loop() {
     mpu.resetFIFO();
 
 #ifdef DEBUGOUTPUT
-    Serial.println(F("FIFO overflow!"));
+   // Serial.println(F("FIFO overflow!"));
 #endif
     // otherwise, check for DMP data ready interrupt
   }
@@ -339,7 +352,7 @@ void loop() {
     mpu.dmpGetQuaternion(&q, fifoBuffer);
 
     // Use some code to convert to R P Y
-    float newZ=  atan2(2.0 * (q.y * q.z + q.w * q.x), q.w * q.w - q.x * q.x - q.y * q.y + q.z * q.z);
+    float newZ=   atan2(2.0 * (q.y * q.z + q.w * q.x), q.w * q.w - q.x * q.x - q.y * q.y + q.z * q.z);
     float newY = -asin(-2.0 * (q.x * q.z - q.w * q.y));
     float newX = -atan2(2.0 * (q.x * q.y + q.w * q.z), q.w * q.w + q.x * q.x - q.y * q.y - q.z * q.z);
 
@@ -372,20 +385,6 @@ void loop() {
       //deactivate interupt
       EIMSK &= ~(1 << INT6); // activates the interrupt. 6 for 6, etc
       full_calib = false;
-#ifdef DEBUGOUTPUT
-      Serial.print(F("Pre  Gyro XYZ Accel XYZ:"));
-      Serial.print(xGyroOffset);
-      Serial.print("\t");
-      Serial.print(yGyroOffset);
-      Serial.print("\t");
-      Serial.print(zGyroOffset);
-      Serial.print("\t");
-      Serial.print(xAccelOffset);
-      Serial.print("\t");
-      Serial.print(yAccelOffset);
-      Serial.print("\t");
-      Serial.println(zAccelOffset);
-#endif
       full_calibrate();
 #ifdef DEBUGOUTPUT
       Serial.print(F("Post Gyro XYZ Accel XYZ:"));
@@ -417,10 +416,11 @@ void loop() {
       else
       {
         calibrated = true;
-        cx = cx / sampleCount;
-        cy = cy / sampleCount;
-        cz = cz / sampleCount;
-        dX = dY = dZ = driftSamples=0.0;
+        cx = cx / (float)sampleCount;
+        cy = cy / (float)sampleCount;
+        cz = cz / (float)sampleCount;
+        dX = dY = dZ = 0.0;
+        driftSamples=0;
         recalibrateSamples = 200;// reduce calibrate next time around
       }
       return;
@@ -430,7 +430,7 @@ void loop() {
     if (digitalRead(BUTTON_PIN) == LOW)
     {
 #ifdef DEBUGOUTPUT
-      Serial.print("Recalibrate");
+      Serial.print(F("Recalibrate"));
 #endif
       sampleCount = 0;
       cx = cy = cz = 0;
@@ -452,16 +452,18 @@ void loop() {
     if (newZ >  16383.0)      newZ =  16383.0;
 
 
-    // Change to suit your personal prefs
-    float xSensitivity = 4.0;//4
-    float ySensitivity = 4.0;//4
-    float zSensitivity = 4.0;//4
-
+#ifdef EXPONENTIAL
+   long  iX = (0.0000304704*newX*newX*xScale)*(newX/abs(newX));//side mount = yaw  
+   long  iY = (0.0000304704*newY*newY*yScale)*(newY/abs(newY));//side mount = pitch
+   long  iZ = (0.0000304704*newZ*newZ*zScale)*(newZ/abs(newZ));//side mount = roll
+#else
     // and scale to out target range plus a 'sensitivity' factor;
-    long  iX = (newX * xSensitivity );//side mount = yaw  *255
-    long  iY = (newY * ySensitivity ); // side mount = pich
-    long  iZ = (newZ * zSensitivity );//side mount = roll
-
+    long  iX = (newX * xScale );//side mount = yaw  *255
+    long  iY = (newY * yScale );// side mount = pich
+    long  iZ = (newZ * zScale );//side mount = roll
+#endif    
+    
+   
     // clamp after scaling to keep values within 16 bit range
     if (iX < -32767)        iX = -32767;
     if (iX >  32767)        iX =  32767;
@@ -474,14 +476,13 @@ void loop() {
     if (nowMillis > lastUpdate)
     {
       //depending on your mounting
-      cx = cx + driftComp;
-      //cy= cy + driftComp;
-      //cz = cz + driftComp;
+      cx = cx + xDriftComp;
+      cy = cy + yDriftComp;
+      cz = cz + zDriftComp;
       
       lastUpdate = nowMillis + 1000;
       
-      
-      driftSamples += +1;
+      driftSamples++;
        dX += (newX - lastX);
        dY += (newY - lastY);
        dZ += (newZ - lastZ);
@@ -491,7 +492,7 @@ void loop() {
       lastZ = newZ;
       
       #ifdef DEBUGOUTPUT
-    Serial.print("X/Y/Z\t");
+    Serial.print(F("X/Y/Z\t"));
     Serial.print(newX  );
     Serial.print("\t\t");
     Serial.print(newY );
@@ -499,16 +500,12 @@ void loop() {
     Serial.print(newZ );
     Serial.print("\t\t");
     
-    Serial.print(dX/driftSamples  );
+    Serial.print(dX/(float)driftSamples  );
     Serial.print("\t\t");
-    Serial.print(dY/driftSamples );
+    Serial.print(dY/(float)driftSamples );
     Serial.print("\t\t");
-    Serial.print(dZ/driftSamples );
-    Serial.print("\t\t");
-    
-    //latency += (millis() - nowMillis);
-    //Serial.print((float)latency / (float)frame);
-    Serial.println(" ");
+    Serial.println(dZ/(float)driftSamples );
+
 #endif
     }
 
@@ -518,8 +515,6 @@ void loop() {
     joySt.zAxis = iZ;
 
     Tracker.setState(&joySt);
-
-    frame++;
   }
 }
 
@@ -539,7 +534,7 @@ void full_calibrate()
 {
 
 #ifdef DEBUGOUTPUT
-  Serial.println(F("FULL Calibrate."));
+  Serial.println(F("FULL Calibrate"));
 #endif
   // Reset offsets
   mpu.setXAccelOffset(0);
@@ -562,7 +557,7 @@ void full_calibrate()
 
   if (state == 1) {
 #ifdef DEBUGOUTPUT
-    Serial.println(F("State 1: !"));
+    Serial.println(F("State 1"));
 #endif
     calibration();
     state++;
@@ -571,7 +566,7 @@ void full_calibrate()
 
   if (state == 2) {
 #ifdef DEBUGOUTPUT
-    Serial.println(F("State 2:"));
+    Serial.println(F("State 2"));
 #endif
     meansensors();
     xGyroOffset = gx_offset;
@@ -654,7 +649,3 @@ void calibration() {
     if (ready == 6) break;
   }
 }
-
-
-
-

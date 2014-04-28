@@ -46,7 +46,7 @@ THE SOFTWARE.
 // smaller movements near the centre, larger at the edges
 //#define EXPONENTIAL
 
-////////////////  Plug in your drift compensation value here:  \\\\\\\\\\\\\\
+//Plug in your drift compensation value here
 float xDriftComp =0.00; 
 float yDriftComp =0.00; 
 float zDriftComp =0.00; 

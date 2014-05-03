@@ -40,6 +40,7 @@ THE SOFTWARE.
 */
 
 //comment this in if you want so see output to the serial monitor
+//when debug output is active, serial input is deactivated.
 //#define DEBUGOUTPUT 
 
 // uncomment this in to enable exponential scaling of head motion
@@ -76,8 +77,6 @@ int yAccelOffset = -807;
 int zAccelOffset = 1263;
 
 ////////////////////////// END OF USER ADJUSTMENTS ////////////////////
-
-
 
 #include "I2Cdev.h"
 #include "MPU6050_6Axis_MotionApps20.h"
@@ -116,12 +115,12 @@ unsigned long lastUpdate;
 float cx , cy, cz = 0.0;
 
 //Running count of samples - used when recalibrating
-int   sampleCount = 0.0;
+int   sampleCount = 0; //should not have . value
 boolean calibrated = false;
 
 //Allows the MPU6050 to settle for 10 seconds.
 //There should be no drift after this time
-unsigned long calibrateTime     = 10000;
+unsigned int calibrateTime     = 10000; //was unsigned long
 
 //Number of samples to take when recalibrating
 unsigned int  recalibrateSamples =  500;
@@ -137,6 +136,13 @@ volatile bool mpuInterrupt = false;
 
 void dmpDataReady() {
   mpuInterrupt = true;
+}
+
+// SERIAL PRINT - discussed at http://scott.dd.com.au/wiki/Arduino_Static_Strings
+// replace Serial.print("string") with DebugPrint("string")
+#define DebugPrint(x) SerialPrint_P(PSTR(x))
+void SerialPrint_P(PGM_P str) {
+  for (uint8_t c; (c = pgm_read_byte(str)); str++) Serial.write(c);
 }
 
 ISR(INT6_vect) {
@@ -161,7 +167,7 @@ int readIntEE(int address)
 void saveOffsets()
 {
 #ifdef DEBUGOUTPUT
-  Serial.println(F("Save offsets"));
+  DebugPrint("Save offsets");
 #endif
   EEPROM.write(0, 97);
   writeIntEE (xGyroOffset, 1);
@@ -178,7 +184,7 @@ void readOffsets()
   if (valid == 97) // We have some stored offsets
   {
 #ifdef DEBUGOUTPUT
-    Serial.print(F("Read offsets"));
+    DebugPrint("Read offsets");
 #endif
     xGyroOffset = readIntEE(1);
     yGyroOffset = readIntEE(3);
@@ -221,24 +227,27 @@ void setup()
 
   // initialize device
 #ifdef DEBUGOUTPUT
-  Serial.println(F("Init MPU6050"));
+  DebugPrint("Init MPU6050");
 #endif
 
   mpu.initialize();
+  
+
+
 
   // verify connection
 #ifdef DEBUGOUTPUT
-  Serial.println(F("Testing Connection"));
+  DebugPrint("Testing Connection");
   Serial.println(mpu.testConnection() ? F("MPU6050 connection successful") : F("MPU6050 connection failed"));
 
   // load and configure the DMP
-  Serial.println(F("Initialising DMP"));
+  DebugPrint("Initialising DMP");
 #endif
 
   devStatus = mpu.dmpInitialize();
 
 #ifdef DEBUGOUTPUT
-  Serial.println(F("DMP Initiaised"));
+  DebugPrint("DMP Initiaised");
 #endif
 
   mpu.setXGyroOffset(xGyroOffset);   //45
@@ -251,7 +260,7 @@ void setup()
   if (devStatus == 0) {
     // turn on the DMP, now that it's ready
 #ifdef DEBUGOUTPUT
-    Serial.println(F("Enabling DMP"));
+    DebugPrint("Enabling DMP");
 #endif
     mpu.setDMPEnabled(true);
 
@@ -264,7 +273,7 @@ void setup()
 
     // set our DMP Ready flag so the main loop() function knows it's okay to use it
 #ifdef DEBUGOUTPUT
-    Serial.println(F("DMP ready"));
+    DebugPrint("DMP ready");
 #endif
     dmpReady = true;
 
@@ -275,7 +284,7 @@ void setup()
     // 1 = initial memory load failed
     // 2 = DMP configuration updates failed
 #ifdef DEBUGOUTPUT
-    Serial.print(F("DMP Initialisation failed: code "));
+    DebugPrint("DMP Initialisation failed: code ");
     Serial.print(devStatus);
 #endif
   }
@@ -285,7 +294,7 @@ void blink()
 {
   // Blink the LED, slowly if we're calibrating
   // Fast if we're not.
-  unsigned long delta = 100;
+  unsigned int delta = 100; //was unsigned long
 
   if (calibrated)
     delta = 300;
@@ -300,6 +309,82 @@ void blink()
 
 unsigned long latency;
 boolean full_calib = false;
+
+#ifndef DEBUGOUTPUT
+//parse serial for changed values, values are used until device restart.
+void parseCommand() {
+      char cmd = Serial.read();
+      
+      switch (cmd) {
+        case 'x':
+        setXdrift();
+        break;
+        case 'y':
+        setYdrift();
+        break;
+        case 'z':
+        setZdrift();
+        break;
+        }
+      } 
+      
+   void setXdrift() {
+    xDriftComp = Serial.parseFloat();
+    Serial.print("xDrift set to: ");
+    Serial.println(xDriftComp);
+    }   
+    
+   void setYdrift() {
+    yDriftComp = Serial.parseFloat();
+    DebugPrint("yDrift set to: ");
+    Serial.println(yDriftComp);
+    }       
+
+   void setZdrift() {
+    zDriftComp = Serial.parseFloat();
+    DebugPrint("zDrift set to: ");
+    Serial.println(zDriftComp);
+    }     
+#endif
+
+void printStats()
+{
+  //Print current settings to serial
+      Serial.println(F("ED Tracker version: 03MAY2014 \nOFFSETS Gyro X/Y/Z: "));
+      //Serial.print(F("\n\tOFFSETS \tGyro X: "));
+      Serial.println(xGyroOffset);
+      Serial.println(yGyroOffset);
+      Serial.println(zGyroOffset);
+      Serial.println(F("ACCEL X/Y/Z: "));
+      Serial.println(xAccelOffset);
+      Serial.println(yAccelOffset);
+      Serial.println(zAccelOffset);
+      Serial.println(F("DRIFT Comp X/Y/Z: "));
+      Serial.println(xDriftComp);
+      Serial.println(yDriftComp);
+      Serial.println(zDriftComp);
+      
+      /* 
+      dtostrf(xDriftComp, 10, 3, buffer);
+      Serial.println(buffer);
+      dtostrf(yDriftComp, 10, 3, buffer);
+      Serial.println(buffer);
+      dtostrf(zDriftComp, 10, 3, buffer);
+      Serial.println(buffer);
+      */
+
+#ifdef EXPONENTIAL
+      DebugPrint("EXP ON\n");
+#else // standard linear response
+      DebugPrint("EXP OFF\n");
+#endif;
+      DebugPrint("SCALE X/Y/Z\n");
+      Serial.println(xScale);
+      Serial.println(yScale);
+      Serial.println(zScale);
+}
+
+
 
 // Main Loop
 void loop() {
@@ -363,17 +448,17 @@ void loop() {
     
     // nowMillis = millis();
     // if we're still in the initial 'settling' period do nothing ...
-    if (nowMillis < calibrateTime)
+    if (nowMillis < (long)calibrateTime) //added (long) to keep calibrateTime an int
     {
       
 #ifdef DEBUGOUTPUT
-      Serial.println(F("Settle"));
+      DebugPrint("Settle");
 #endif
       // unless we have been asked for a full blow auto calibrate!
       if (digitalRead(BUTTON_PIN) == LOW)
       {
 #ifdef DEBUGOUTPUT
-        Serial.println(F("Full Calibration Requested."));
+        DebugPrint("Full Calibration Requested.");
 #endif
         full_calib = true;
       }
@@ -387,18 +472,8 @@ void loop() {
       full_calib = false;
       full_calibrate();
 #ifdef DEBUGOUTPUT
-      Serial.print(F("Post Gyro XYZ Accel XYZ:"));
-      Serial.print(xGyroOffset);
-      Serial.print("\t");
-      Serial.print(yGyroOffset);
-      Serial.print("\t");
-      Serial.print(zGyroOffset);
-      Serial.print("\t");
-      Serial.print(xAccelOffset);
-      Serial.print("\t");
-      Serial.print(yAccelOffset);
-      Serial.print("\t");
-      Serial.println(zAccelOffset);
+      DebugPrint("POST ");
+      printStats();
 #endif
       EIMSK |= (1 << INT6); // activates the interrupt. 6 for 6,
       return;
@@ -429,9 +504,10 @@ void loop() {
     // Have we been asked to recalibrate ?
     if (digitalRead(BUTTON_PIN) == LOW)
     {
-#ifdef DEBUGOUTPUT
-      Serial.print(F("Recalibrate"));
-#endif
+
+      DebugPrint("\nRECALIBRATING\n");
+
+      printStats(); //print stats when button is pressed
       sampleCount = 0;
       cx = cy = cz = 0;
       calibrated = false;
@@ -492,18 +568,18 @@ void loop() {
       lastZ = newZ;
       
       #ifdef DEBUGOUTPUT
-    Serial.print(F("X/Y/Z\t"));
+    DebugPrint("X/Y/Z\t");
     Serial.print(newX  );
-    Serial.print("\t\t");
+    DebugPrint("\t\t");
     Serial.print(newY );
-    Serial.print("\t\t");
+    DebugPrint("\t\t");
     Serial.print(newZ );
-    Serial.print("\t\t");
+    DebugPrint("\t\t");
     
     Serial.print(dX/(float)driftSamples  );
-    Serial.print("\t\t");
+    DebugPrint("\t\t");
     Serial.print(dY/(float)driftSamples );
-    Serial.print("\t\t");
+    DebugPrint("\t\t");
     Serial.println(dZ/(float)driftSamples );
 
 #endif
@@ -516,8 +592,12 @@ void loop() {
 
     Tracker.setState(&joySt);
   }
+#ifndef DEBUGOUTPUT
+  //if serial buffer exists then parse it
+  //type x20.2 ENTER to temporarily use 20.2 as the xdrift compensation
+  if (Serial.available()) parseCommand(); 
+#endif
 }
-
 
 /* Additional calibration code by luisrodenas */
 ///////////////////////////////////   CONFIGURATION   /////////////////////////////
@@ -532,9 +612,9 @@ int ax_offset, ay_offset, az_offset, gx_offset, gy_offset, gz_offset;
 
 void full_calibrate()
 {
-
+  
 #ifdef DEBUGOUTPUT
-  Serial.println(F("FULL Calibrate"));
+  DebugPrint("FULL Calibrate");
 #endif
   // Reset offsets
   mpu.setXAccelOffset(0);
@@ -548,7 +628,7 @@ void full_calibrate()
 
   if (state == 0) {
 #ifdef DEBUGOUTPUT
-    Serial.println(F("State 0"));
+    DebugPrint("State 0");
 #endif
     meansensors();
     state++;
@@ -557,7 +637,7 @@ void full_calibrate()
 
   if (state == 1) {
 #ifdef DEBUGOUTPUT
-    Serial.println(F("State 1"));
+    DebugPrint("State 1");
 #endif
     calibration();
     state++;
@@ -581,7 +661,8 @@ void full_calibrate()
 
 ///////////////////////////////////   FUNCTIONS   ////////////////////////////////////
 void meansensors() {
-  long i = 0, buff_ax = 0, buff_ay = 0, buff_az = 0, buff_gx = 0, buff_gy = 0, buff_gz = 0;
+  long buff_ax = 0, buff_ay = 0, buff_az = 0, buff_gx = 0, buff_gy = 0, buff_gz = 0;
+  int i = 0; //was long
 
   while (i < (buffersize + 101)) {
     // read raw accel/gyro measurements from device

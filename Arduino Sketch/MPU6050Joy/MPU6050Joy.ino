@@ -479,7 +479,7 @@ void loop() {
       full_calib = false;
       full_calibrate();
 #ifdef DEBUGOUTPUT
-      DebugPrint("POST ");
+      DebugPrint("\nPOST\n");
       printStats();
 #endif
       EIMSK |= (1 << INT6); // activates the interrupt. 6 for 6,
@@ -621,7 +621,7 @@ void full_calibrate()
 {
   
 #ifdef DEBUGOUTPUT
-  DebugPrint("FULL Calibrate");
+  DebugPrint("\nFULL Calibrate\n");
 #endif
   // Reset offsets
   mpu.setXAccelOffset(0);
@@ -635,7 +635,7 @@ void full_calibrate()
 
   if (state == 0) {
 #ifdef DEBUGOUTPUT
-    DebugPrint("State 0");
+    DebugPrint("State 0\n");
 #endif
     meansensors();
     state++;
@@ -644,7 +644,7 @@ void full_calibrate()
 
   if (state == 1) {
 #ifdef DEBUGOUTPUT
-    DebugPrint("State 1");
+    DebugPrint("State 1\n");
 #endif
     calibration();
     state++;
@@ -653,7 +653,7 @@ void full_calibrate()
 
   if (state == 2) {
 #ifdef DEBUGOUTPUT
-    Serial.println(F("State 2"));
+    DebugPrint("State 2\n");
 #endif
     meansensors();
     xGyroOffset = gx_offset;

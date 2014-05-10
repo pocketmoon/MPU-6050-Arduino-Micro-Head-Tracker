@@ -299,7 +299,7 @@ void blink()
   if (calibrated)
     delta = 300;
 
-  if (nowMillis > lastMillis + delta)
+  if (nowMillis > lastMillis + (unsigned long)delta)
   {
     blinkState = !blinkState;
     digitalWrite(LED_PIN, blinkState);
@@ -330,19 +330,19 @@ void parseCommand() {
       
    void setXdrift() {
     xDriftComp = Serial.parseFloat();
-    Serial.print("xDrift set to: ");
+    Serial.print("\nxDrift set to: ");
     Serial.println(xDriftComp);
     }   
     
    void setYdrift() {
     yDriftComp = Serial.parseFloat();
-    DebugPrint("yDrift set to: ");
+    DebugPrint("\nyDrift set to: ");
     Serial.println(yDriftComp);
     }       
 
    void setZdrift() {
     zDriftComp = Serial.parseFloat();
-    DebugPrint("zDrift set to: ");
+    DebugPrint("\nzDrift set to: ");
     Serial.println(zDriftComp);
     }     
 #endif
@@ -350,7 +350,7 @@ void parseCommand() {
 void printStats()
 {
   //Print current settings to serial
-      Serial.println(F("ED Tracker version: 03MAY2014 \nOFFSETS Gyro X/Y/Z: "));
+      Serial.println(F("ED Tracker version: 10MAY2014 \nOFFSETS Gyro X/Y/Z: "));
       //Serial.print(F("\n\tOFFSETS \tGyro X: "));
       Serial.println(xGyroOffset);
       Serial.println(yGyroOffset);
@@ -448,11 +448,11 @@ void loop() {
     
     // nowMillis = millis();
     // if we're still in the initial 'settling' period do nothing ...
-    if (nowMillis < (long)calibrateTime) //added (long) to keep calibrateTime an int
+    if (nowMillis < (unsigned long)calibrateTime) //added (unsigned long) to keep calibrateTime an int
     {
       
 #ifdef DEBUGOUTPUT
-      DebugPrint("Settle");
+      DebugPrint("Settle-");
 #endif
       // unless we have been asked for a full blow auto calibrate!
       if (digitalRead(BUTTON_PIN) == LOW)
@@ -574,12 +574,12 @@ void loop() {
     Serial.print(newY );
     DebugPrint("\t\t");
     Serial.print(newZ );
-    DebugPrint("\t\t");
+    DebugPrint("\tDrift\tx:");
     
     Serial.print(dX/(float)driftSamples  );
-    DebugPrint("\t\t");
+    DebugPrint("\ty:");
     Serial.print(dY/(float)driftSamples );
-    DebugPrint("\t\t");
+    DebugPrint("\tz:");
     Serial.println(dZ/(float)driftSamples );
 
 #endif

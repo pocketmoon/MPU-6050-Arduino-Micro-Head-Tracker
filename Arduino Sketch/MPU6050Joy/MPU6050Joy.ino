@@ -350,19 +350,24 @@ void parseCommand() {
 void printStats()
 {
   //Print current settings to serial
-      Serial.println(F("ED Tracker version: 10MAY2014 \nOFFSETS Gyro X/Y/Z: "));
+      Serial.println(F("ED Tracker version: 10MAY2014 \nOFFSETS Gyro X/Y/Z:"));
       //Serial.print(F("\n\tOFFSETS \tGyro X: "));
       Serial.println(xGyroOffset);
       Serial.println(yGyroOffset);
       Serial.println(zGyroOffset);
-      Serial.println(F("ACCEL X/Y/Z: "));
+      Serial.println(F("ACCEL X/Y/Z:"));
       Serial.println(xAccelOffset);
       Serial.println(yAccelOffset);
       Serial.println(zAccelOffset);
-      Serial.println(F("DRIFT Comp X/Y/Z: "));
+      Serial.println(F("DRIFT Comp X/Y/Z:"));
       Serial.println(xDriftComp);
       Serial.println(yDriftComp);
       Serial.println(zDriftComp);
+    
+    Serial.println(F("DRIFT Sample X/Y/Z:")); 
+    Serial.println(dX/(float)driftSamples  );
+    Serial.println(dY/(float)driftSamples );;
+    Serial.println(dZ/(float)driftSamples );
       
       /* 
       dtostrf(xDriftComp, 10, 3, buffer);

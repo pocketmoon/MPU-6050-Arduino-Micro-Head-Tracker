@@ -138,6 +138,8 @@ void dmpDataReady() {
   mpuInterrupt = true;
 }
 
+
+
 // SERIAL PRINT - discussed at http://scott.dd.com.au/wiki/Arduino_Static_Strings
 // replace Serial.print("string") with DebugPrint("string")
 #define DebugPrint(x) SerialPrint_P(PSTR(x))
@@ -330,7 +332,7 @@ void parseCommand() {
       
    void setXdrift() {
     xDriftComp = Serial.parseFloat();
-    Serial.print("\nxDrift set to: ");
+    DebugPrint("\nxDrift set to: ");
     Serial.println(xDriftComp);
     }   
     
@@ -350,21 +352,21 @@ void parseCommand() {
 void printStats()
 {
   //Print current settings to serial
-      Serial.println(F("ED Tracker version: 10MAY2014 \nOFFSETS Gyro X/Y/Z:"));
+      Serial.println(F("ED Tracker version: 10MAY2014 \n\nOFFSETS X/Y/Z\ngyro"));
       //Serial.print(F("\n\tOFFSETS \tGyro X: "));
       Serial.println(xGyroOffset);
       Serial.println(yGyroOffset);
       Serial.println(zGyroOffset);
-      Serial.println(F("ACCEL X/Y/Z:"));
+      DebugPrint("accel\n");
       Serial.println(xAccelOffset);
       Serial.println(yAccelOffset);
       Serial.println(zAccelOffset);
-      Serial.println(F("DRIFT Comp X/Y/Z:"));
+      Serial.println(F("\nDRIFT X/Y/Z\ncomp"));
       Serial.println(xDriftComp);
       Serial.println(yDriftComp);
       Serial.println(zDriftComp);
     
-    Serial.println(F("DRIFT Sample X/Y/Z:")); 
+    Serial.println(F("sample")); 
     Serial.println(dX/(float)driftSamples  );
     Serial.println(dY/(float)driftSamples );;
     Serial.println(dZ/(float)driftSamples );
@@ -379,11 +381,11 @@ void printStats()
       */
 
 #ifdef EXPONENTIAL
-      DebugPrint("EXP ON\n");
+      DebugPrint("\nEXP ON\n");
 #else // standard linear response
-      DebugPrint("EXP OFF\n");
+      DebugPrint("\nEXP OFF\n");
 #endif;
-      DebugPrint("SCALE X/Y/Z\n");
+      DebugPrint("scale X/Y/Z\n");
       Serial.println(xScale);
       Serial.println(yScale);
       Serial.println(zScale);

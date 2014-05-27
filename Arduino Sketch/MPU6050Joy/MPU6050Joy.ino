@@ -1,7 +1,7 @@
 //
 //  Head Tracker Sketch
 //
-// 22/03/2014 by Rob James  and Dan 'Brumter'
+// 22/03/2014 by Rob James and Dan 'Brumster'
 //
 // Changelog:
 //     2014-03-01 Initial Version
@@ -13,7 +13,9 @@
 //     2014-04-03 Added Dan's drift compensation. Changed clipping code
 //     2014-04-21 Tidy up - moved main user enterable value to top
 //     2014-04-23 Add Dan's exponential response as a #define
-//
+//     2014-05-27 Fixed exponential scaling, improved commenting, altered debug
+//                output to make instructions/process easier, defaulted offsets
+//                in code to 0
 
 /* ============================================
 I2Cdev device library code is placed under the MIT license
@@ -55,9 +57,9 @@ float zDriftComp =0.00;
 // how close you sit to it
 
 #ifdef EXPONENTIAL
-float xScale = 8.0;
-float yScale = 8.0;
-float zScale = 8.0;
+float xScale = 3.5;
+float yScale = 5.0;
+float zScale = 5.0;
 #else // standard linear response
 float xScale = 2.5;
 float yScale = 2.5;
@@ -68,16 +70,14 @@ float zScale = 2.5;
 // running the master calibration sketch at
 // http://www.i2cdevlib.com/forums/topic/96-arduino-sketch-to-automatically-calculate-mpu6050-offsets/
 //
-int xGyroOffset = 50;
-int yGyroOffset = 20;
-int zGyroOffset = 2;
-int xAccelOffset = -1086;
-int yAccelOffset = -807;
-int zAccelOffset = 1263;
+int xGyroOffset = 0;
+int yGyroOffset = 0;
+int zGyroOffset = 0;
+int xAccelOffset = 0;
+int yAccelOffset = 0;
+int zAccelOffset = 0;
 
 ////////////////////////// END OF USER ADJUSTMENTS ////////////////////
-
-
 
 #include "I2Cdev.h"
 #include "MPU6050_6Axis_MotionApps20.h"
@@ -178,7 +178,7 @@ void readOffsets()
   if (valid == 97) // We have some stored offsets
   {
 #ifdef DEBUGOUTPUT
-    Serial.print(F("Read offsets"));
+    Serial.println(F("Read offsets"));
 #endif
     xGyroOffset = readIntEE(1);
     yGyroOffset = readIntEE(3);
@@ -241,12 +241,12 @@ void setup()
   Serial.println(F("DMP Initiaised"));
 #endif
 
-  mpu.setXGyroOffset(xGyroOffset);   //45
-  mpu.setYGyroOffset(yGyroOffset);   //24
-  mpu.setZGyroOffset(zGyroOffset);    //5
-  mpu.setXAccelOffset(xAccelOffset);   //1234
-  mpu.setYAccelOffset(yAccelOffset);   //1234
-  mpu.setZAccelOffset(zAccelOffset);   //1234
+  mpu.setXGyroOffset(xGyroOffset);
+  mpu.setYGyroOffset(yGyroOffset);
+  mpu.setZGyroOffset(zGyroOffset);
+  mpu.setXAccelOffset(xAccelOffset);
+  mpu.setYAccelOffset(yAccelOffset);
+  mpu.setZAccelOffset(zAccelOffset);
 
   if (devStatus == 0) {
     // turn on the DMP, now that it's ready
@@ -351,12 +351,15 @@ void loop() {
     // Get the nice, gimbal lock free quaternion
     mpu.dmpGetQuaternion(&q, fifoBuffer);
 
-    // Use some code to convert to R P Y
+    // Use some code to convert to R P Y in what appear to be radians (-3.14 to +3.14). However be careful here, as the range that a radian measures
+    // depends upon the Gyro scale value set on the MPU. So do not assume 1 radian = 57.295 degrees, this only applies when the scale range is set
+    // to 2000 for the gyro.
     float newZ=   atan2(2.0 * (q.y * q.z + q.w * q.x), q.w * q.w - q.x * q.x - q.y * q.y + q.z * q.z);
     float newY = -asin(-2.0 * (q.x * q.z - q.w * q.y));
     float newX = -atan2(2.0 * (q.x * q.y + q.w * q.z), q.w * q.w + q.x * q.x - q.y * q.y - q.z * q.z);
 
-    // scale to range -32767 to 32767
+    // scale to range -32767 to 32767. This is actually divide by Pi to get to a -1.0 to +1.0 range, then multiply by 32768.
+    // Obviously easier to just multiply by 10430.06 in one single step!
     newX = newX   * 10430.06;
     newY = newY   * 10430.06;
     newZ = newZ   * 10430.06;
@@ -365,10 +368,6 @@ void loop() {
     // if we're still in the initial 'settling' period do nothing ...
     if (nowMillis < calibrateTime)
     {
-      
-#ifdef DEBUGOUTPUT
-      Serial.println(F("Settle"));
-#endif
       // unless we have been asked for a full blow auto calibrate!
       if (digitalRead(BUTTON_PIN) == LOW)
       {
@@ -453,9 +452,19 @@ void loop() {
 
 
 #ifdef EXPONENTIAL
-   long  iX = (0.0000304704*newX*newX*xScale)*(newX/abs(newX));//side mount = yaw  
-   long  iY = (0.0000304704*newY*newY*yScale)*(newY/abs(newY));//side mount = pitch
-   long  iZ = (0.0000304704*newZ*newZ*zScale)*(newZ/abs(newZ));//side mount = roll
+   // Exponential equation for output value based on input value is
+   // output = (factor x input)^2
+   // Factor needs to be calculated based on the upper limit of the input value as
+   // factor = sqrt( maxval / maxval^2 )
+   // ...which, for 16383, is 0.0078127
+   // In the below, to avoid expensive squaring functions, factor^2 is pre-calculated. 0.0078127^2 = 0.000061038
+   // That would output a value up to 16383, but we now want to scale up to 32767, so we also include a doubling factor, so 0.000122076
+   // This brings the clamped-to-16383 value up to the 16bit joystick output value of 32767. Obviously the xScale factor
+   // is applied across the board and generally ramps the output value up way before the newX value clamps anyway.
+   // The (newX/abs(newX)) is just to keep the signing, as the squaring loses the - on negative input values.
+   long  iX = (0.000122076*newX*newX*xScale)*(newX/abs(newX));//side mount = yaw 
+   long  iY = (0.000122076*newY*newY*yScale)*(newY/abs(newY));//side mount = pitch
+   long  iZ = (0.000122076*newZ*newZ*zScale)*(newZ/abs(newZ));//side mount = roll
 #else
     // and scale to out target range plus a 'sensitivity' factor;
     long  iX = (newX * xScale );//side mount = yaw  *255
@@ -498,14 +507,14 @@ void loop() {
     Serial.print(newY );
     Serial.print("\t\t");
     Serial.print(newZ );
-    Serial.print("\t\t");
-    
-    Serial.print(dX/(float)driftSamples  );
-    Serial.print("\t\t");
-    Serial.print(dY/(float)driftSamples );
-    Serial.print("\t\t");
-    Serial.println(dZ/(float)driftSamples );
+    Serial.print("\t\t(Drift ");
 
+    Serial.print(dX/(float)driftSamples  );
+    Serial.print(",");
+    Serial.print(dY/(float)driftSamples );
+    Serial.print(",");
+    Serial.print(dZ/(float)driftSamples );
+    Serial.println(")");
 #endif
     }
 
